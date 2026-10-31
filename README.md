@@ -14,18 +14,25 @@ YysScript/
 │  ├─ fluentui/           # 内嵌的 FluentUI 组件
 │  └─ config/             # 配置目录（个人账号配置不入库）
 ├─ OASX/                  # Flutter 图形启动器（已编译产物）
+├─ _find-conda.bat        # 自动定位本机 conda（被下面几个脚本调用）
 ├─ launch-oas.bat         # 一键启动（推荐入口）
 ├─ launch-oas.ps1
-├─ start-oas.bat
-├─ install-deps.bat       # 依赖安装
-└─ 使用说明.md
+├─ start-oas.bat          # 只启后端，日志打在窗口里
+├─ install-deps.bat       # 一次性装环境：建 .conda + 装依赖
+├─ 部署指南.md            # 换电脑怎么从零跑起来
+└─ 使用说明.md            # 本地定制功能的详细笔记
 ```
 
 ## 运行
 
-1. 首次使用先跑 `install-deps.bat` 安装依赖。
-2. 双击 `launch-oas.bat` 启动，或直接运行 `OASX/oasx.exe`。
-3. 后端服务默认监听 `http://127.0.0.1:22267`。
+> 换电脑 / 第一次使用，请看 **[部署指南.md](部署指南.md)**，里面有从零安装的完整步骤。
+
+1. 首次使用先跑 `install-deps.bat`：自动创建 Python 3.10 环境并安装依赖。
+2. 先启动模拟器（分辨率必须是 **1280×720**），再双击 `launch-oas.bat` 启动，或直接运行 `OASX/oasx.exe`。
+3. OASX 登录页 Address 填 `127.0.0.1:22267`（不要加 `http://`），用户名密码留空。
+4. 后端服务默认监听 `http://127.0.0.1:22267`。
+
+脚本会自动在本机查找 conda；装在非常规位置时，在项目根目录建一个 `conda-path.txt` 写一行 conda.bat 的完整路径即可。
 
 ## 相对上游的本地改动
 

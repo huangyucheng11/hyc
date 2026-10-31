@@ -24,6 +24,9 @@ __pycache__/
 .venv/
 venv/
 
+# ---- 本机专属配置（每台机器自己写，不进仓库）----
+conda-path.txt
+
 # ---- 系统与临时文件 ----
 GetStorage-before-address-fix-*.json
 *.tmp
