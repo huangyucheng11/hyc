@@ -1,0 +1,33 @@
+# ---- 运行环境 / 依赖（体积巨大，不入库）----
+.conda/
+.tools/
+.support/
+downloads/
+.workbuddy/
+
+# ---- 上游 OAS 仓库的本地 git 历史（仅本机保留，不上传）----
+OnmyojiAutoScript/.git-upstream/
+
+# ---- 运行日志与截图 ----
+.logs/
+OnmyojiAutoScript/log/
+
+# ---- 自动生成的备份（体积大且可重新生成）----
+OASX-backup-*/
+OnmyojiAutoScript/config/task_backups/
+OnmyojiAutoScript/tasks/*-backup-*/
+
+# ---- Python 缓存 ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 系统与临时文件 ----
+GetStorage-before-address-fix-*.json
+*.tmp
+*.log
+Thumbs.db
+desktop.ini
+.DS_Store
