@@ -1,6 +1,5 @@
-from cached_property import cached_property
+from time import sleep
 
-from module.atom.animate import RuleAnimate
 from module.atom.image import RuleImage
 from module.base.timer import Timer
 from module.logger import logger
@@ -16,18 +15,15 @@ class ExploreWantedBoss(Exception):
 class WQExplore(BaseExploration, HighLight):
     _cnt_exploration: int = 0
 
-    @cached_property
-    def _match_end(self):
-        return RuleAnimate(self.I_SWIPE_END)
-
     def explore(self, goto: RuleImage, num: int):
         logger.info(f'Start exploring with number: {num}')
         explore_init = False
         explore_only_boss: bool = True
         _cnt_exploration = 0
         search_fail_cnt = 0
-        search_fail_timer = Timer(3.2)  # 这里设置的时间一定要大于S_SWIPE_BACKGROUND_RIGHT滑动的时间
+        search_fail_timer = Timer(1.5)  # 空闲这么久没看到悬赏高亮，就向右滑动找怪
         unknown_timer = Timer(2.5)  # 未知场景(如奖励结算页)空等超时后点击屏幕继续
+        swipe_cnt = 0  # 本次进图滑动次数，仅用于日志
         # https://github.com/runhey/OnmyojiAutoScript/pull/1697 云景阆苑 皮肤
         from tasks.Component.Costume.config import MainType
         if self.config.model.global_game.costume_config.costume_main_type == MainType.COSTUME_MAIN_13:
@@ -96,14 +92,34 @@ class WQExplore(BaseExploration, HighLight):
                     logger.info(f'Fight, minions cnt {self.minions_cnt}')
                     continue
                 # 向后拉,寻找怪
+                # 2026-11-01 修复: 原来用 _match_end(I_SWIPE_END) 判断"已到地图尽头", 实测严重误判——
+                #   进图只滑动一次就报 "Animation Stable @ RES_SWIPE_END", 随即 Quit explore,
+                #   于是妖怪在右侧时永远走不到, 还会引发 GameTooManyClick / GameStuckError。
+                #   改为对比滑动前后画面(与 tasks/Exploration/solo.py 一致)。
                 if search_fail_timer.reached():
                     search_fail_timer.reset()
-                    if self._match_end.stable(self.device.image, refresh_after_stable=True):
+                    before_image = self.device.image
+                    self.swipe(self.S_SWIPE_BACKGROUND_RIGHT)
+                    sleep(0.3)
+                    self.screenshot()
+                    unchanged = self.is_swipe_unchanged(before_image, self.device.image)
+                    if unchanged:
+                        # 单次可能是动画没结束, 再确认一次
+                        sleep(0.3)
+                        self.screenshot()
+                        unchanged = self.is_swipe_unchanged(before_image, self.device.image)
+                    # 滑动途中可能弹确认框/进入战斗, 交给下一轮循环判断
+                    if self.get_current_scene() != Scene.MAIN:
+                        continue
+                    if unchanged:
+                        logger.info(f'Reached the right boundary after {swipe_cnt} swipes, this area is cleared')
                         _cnt_exploration += 1
                         self.quit_explore()
                         continue
-                    if self.swipe(self.S_SWIPE_BACKGROUND_RIGHT, interval=3):
-                        continue
+                    self.device.click_record_remove(self.S_SWIPE_BACKGROUND_RIGHT.name)
+                    swipe_cnt += 1
+                    logger.info(f'Swipe right to look for wanted monster, {swipe_cnt}')
+                    continue
                 if not search_fail_timer.started():
                     search_fail_timer.start()
             elif scene == Scene.BATTLE_PREPARE:
@@ -115,6 +131,9 @@ class WQExplore(BaseExploration, HighLight):
                 if unknown_timer.reached():
                     unknown_timer.reset()
                     logger.info('Unknown/battle scene, tap center to continue')
+                    # 2026-11-01: 结算页可能停留较久, 反复点同一个坐标会触发
+                    #   GameTooManyClickError(与 swipe 交替时也会), 每次点前清空点击记录
+                    self.device.click_record_clear()
                     self.device.click(640, 360, control_name='wq_unknown_continue')
                 elif not unknown_timer.started():
                     unknown_timer.start()

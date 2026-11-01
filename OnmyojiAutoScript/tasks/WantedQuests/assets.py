@@ -172,6 +172,8 @@ class WantedQuestsAssets:
 	O_WQ_MONSTER_TYPE = RuleOcr(roi=(165,215,45,175), area=(165,215,45,175), mode="Full", method="Default", keyword="", name="wq_monster_type")
 	#  
 	O_WQ_TEXT_ALL = RuleOcr(roi=(12,119,88,393), area=(12,119,88,393), mode="Full", method="Default", keyword="", name="wq_text_all")
+	# 秘闻"挑战"按钮兜底识别 (2026-11-01: 每周竞速秘闻的面板布局会变, 固定模板可能匹配不到)
+	O_WQ_SECRET_FIRE = RuleOcr(roi=(700,380,580,340), area=(700,380,580,340), mode="Full", method="Default", keyword="", name="wq_secret_fire")
 
 
 	# Image Rule Assets

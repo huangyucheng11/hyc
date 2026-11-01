@@ -374,7 +374,12 @@ class ScriptTask(WantedDialogue, WQExplore, SecretScriptTask, WantedQuestsAssets
         best_type, destination, once_number, goto_button, func, _ = info_wq_list[0]
         do_number = 1 if once_number >= num_want else num_want // once_number + (1 if num_want % once_number > 0 else 0)
         try:
-            func(goto_button, do_number)
+            ok = func(goto_button, do_number)
+            # 2026-11-01: func 显式返回 False 表示这个目标打不了了(比如竞速秘闻面板变化),
+            # 加入排除列表, 避免外层 while 反复重试同一条任务直到 current_count 超限
+            if ok is False:
+                logger.warning(f'Cannot finish this wanted quest ({best_type} {destination}), skip it')
+                self.want_strategy_excluding.append(info_wq_list[0])
         except ExploreWantedBoss:
             logger.warning('The extreme case. The quest only needs to challenge one final boss, so skip it')
             self.want_strategy_excluding.append(info_wq_list[0])
@@ -411,11 +416,27 @@ class ScriptTask(WantedDialogue, WQExplore, SecretScriptTask, WantedQuestsAssets
             if self.appear_then_click(self.I_UI_BACK_YELLOW, interval=1.5):
                 continue
 
-    def secret(self, goto, num=1):
-        self.ui_click(goto, self.I_WQSE_FIRE)
+    def secret(self, goto, num=1) -> bool:
+        """
+        秘闻悬赏
+        2026-11-01: 每周会有一个"竞速"秘闻(已通关, 本周变成给勾玉的特殊副本), 它的面板布局
+        和其他秘闻不同, 固定的 I_WQSE_FIRE 模板可能匹配不到, 表现就是"只打一次就退出去"。
+        这里改为: 进面板允许模板失败 -> OCR 兜底找"挑战"; 每场打完用带超时的方式等挑战按钮,
+        实在等不到就干净地退出秘闻, 并把该目标加入排除列表, 不再无脑重试。
+        """
+        entered = self.ui_click(goto, stop=self.I_WQSE_FIRE, interval=2, timeout=10)
+        if not entered:
+            logger.warning('Challenge button not matched, try OCR fallback (weekly 竞速 secret zone)')
+            if not self.click_secret_fire_by_ocr():
+                logger.warning('Cannot find the challenge button, skip this secret zone')
+                self.exit_secret_zone()
+                return False
+
         for i in range(num):
-            self.wait_until_appear(self.I_WQSE_FIRE)
-            # self.ui_click_until_disappear(self.I_WQSE_FIRE)
+            if not self.wait_secret_fire():
+                logger.warning('Challenge button disappeared after battle, '
+                               'this is probably a 竞速 secret zone, stop challenging it')
+                break
             # 又臭又长的对话针的是服了这个网易
             click_count = 0
             while 1:
@@ -433,9 +454,60 @@ class ScriptTask(WantedDialogue, WQExplore, SecretScriptTask, WantedQuestsAssets
                         self.device.click_record_clear()
                     continue
             success = self.run_general_battle(self.battle_config)
+            if not success:
+                logger.warning('Secret battle failed, stop challenging it')
+                break
+
+        self.exit_secret_zone()
+        logger.info('Secret mission finished')
+        return True
+
+    def wait_secret_fire(self, timeout: int = 12) -> bool:
+        """
+        等待秘闻的"挑战"按钮。先走模板匹配, 超时后用 OCR 再找一次。
+        """
+        timer = Timer(timeout).start()
+        while 1:
+            self.screenshot()
+            if self.appear(self.I_WQSE_FIRE):
+                return True
+            if timer.reached():
+                return self.click_secret_fire_by_ocr()
+            sleep(0.5)
+
+    def click_secret_fire_by_ocr(self) -> bool:
+        """
+        在秘闻面板右下角用 OCR 找"挑战"两个字并点击。
+        用于每周竞速秘闻那种布局变化、固定模板对不上的情况。
+        """
+        res = self.O_WQ_SECRET_FIRE.detect_and_ocr(self.device.image)
+        for r in res:
+            if '挑战' not in r.ocr_text.replace(' ', ''):
+                continue
+            box = r.box
+            x1, y1 = float(box[0, 0]), float(box[0, 1])
+            x2, y2 = float(box[1, 0]), float(box[2, 1])
+            cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+            logger.info(f'Click 挑战 by OCR at ({cx}, {cy})')
+            self.device.click_record_clear()
+            self.device.click(cx, cy, control_name='wq_secret_fire_ocr')
+            sleep(1.0)
+            return True
+        return False
+
+    def exit_secret_zone(self):
+        """
+        从秘闻副本退出回到探索页, 带超时保护, 不会无限点击。
+        """
+        timer = Timer(15).start()
         while 1:
             self.screenshot()
             if self.appear(self.I_CHECK_SECRET_ZONES):
+                break
+            if timer.reached():
+                logger.warning('Exit secret zone timeout, force back')
+                self.device.click_record_clear()
+                self.click(self.I_UI_BACK_RED, interval=1.5)
                 break
             if self.appear_then_click(self.I_UI_BACK_RED, interval=1):
                 continue
@@ -443,7 +515,6 @@ class ScriptTask(WantedDialogue, WQExplore, SecretScriptTask, WantedQuestsAssets
                 continue
         self.goto_page(page_exploration)
         self.wait_until_stable(self.I_CHECK_EXPLORATION)
-        logger.info('Secret mission finished')
 
     def invite_random(self, add_button: RuleImage):
         self.screenshot()
